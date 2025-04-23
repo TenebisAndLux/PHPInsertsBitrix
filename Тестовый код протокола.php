@@ -25,9 +25,9 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
             '=SECOND_NAME' => $fioParts[2], // Отчество
         ];
         $filter[] = [
-            '%LAST_NAME' => $fioParts[0] . '%',
-            '%NAME' => $fioParts[1] . '%',
-            '%SECOND_NAME' => $fioParts[2] . '%',
+            'LAST_NAME' => $fioParts[0] . '%',
+            'NAME' => $fioParts[1] . '%',
+            'SECOND_NAME' => $fioParts[2] . '%',
         ];
     }
     
@@ -38,8 +38,8 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
             '=NAME' => $fioParts[1],        // Имя
         ];
         $filter[] = [
-            '%LAST_NAME' => $fioParts[0] . '%',
-            '%NAME' => $fioParts[1] . '%',
+            'LAST_NAME' => $fioParts[0] . '%',
+            'NAME' => $fioParts[1] . '%',
         ];
     }
     
@@ -71,7 +71,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
 $searchVariants = [
     [$lastName, $firstName, $secondName],  // Фамилия, Имя, Отчество
     [$lastName, $firstName],               // Фамилия, Имя
-    [$lastName . ' ' . mb_substr($firstName, 0, 1) . mb_substr($secondName, 0, 1)], // Фамилия + инициалы
+    [$lastName, mb_substr($firstName, 0, 1), mb_substr($secondName, 0, 1)], // Фамилия + инициалы
     [$lastName]                            // Только Фамилия
 ];
 

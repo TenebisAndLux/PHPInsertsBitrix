@@ -115,95 +115,149 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
     // Если это 3 буквенные инициалы (АМЕ)
     if (count($fioParts) == 1 && preg_match('/^[А-ЯЁ]{3}$/u', $fioParts[0])) {
         $initials = $fioParts[0];
-        $filter = [
-            'LOGIC' => 'AND', // Изменили OR на AND - должны совпадать все условия
-            '=ACTIVE' => 'Y',
-            ['%=LAST_NAME%' => mb_substr($initials, 0, 1).'%'],
-            ['%=NAME%' => mb_substr($initials, 1, 1).'%'],
-            ['%=SECOND_NAME%' => mb_substr($initials, 2, 1).'%']
-        ];
-        
         $logMessage .= "Поиск по инициалам: {$initials}\n";
-        $logMessage .= "Фильтр поиска: " . print_r($filter, true) . "\n";
+        
+        // 1. Точное совпадение инициалов (первые буквы ФИО)
+        $users = UserTable::getList([
+            'filter' => [
+                '=ACTIVE' => 'Y',
+                'LAST_NAME' => mb_substr($initials, 0, 1).'%',
+                'NAME' => mb_substr($initials, 1, 1).'%',
+                'SECOND_NAME' => mb_substr($initials, 2, 1).'%'
+            ],
+            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME'],
+        ])->fetchAll();
+
+        foreach ($users as $user) {
+            $lastNameInitial = mb_substr($user['LAST_NAME'], 0, 1);
+            $nameInitial = mb_substr($user['NAME'], 0, 1);
+            $secondNameInitial = mb_substr($user['SECOND_NAME'], 0, 1);
+            
+            if ($lastNameInitial == mb_substr($initials, 0, 1) &&
+               $nameInitial == mb_substr($initials, 1, 1) &&
+               $secondNameInitial == mb_substr($initials, 2, 1)) {
+                
+                $logMessage .= "Точное совпадение инициалов: ID: {$user['ID']} (Фамилия: {$user['LAST_NAME']} Имя: {$user['NAME']} Отчество: {$user['SECOND_NAME']})\n";
+                if ($logString !== null) $logString .= $logMessage;
+                return $user['ID'];
+            }
+        }
+        
+        $logMessage .= "Пользователь с точными инициалами не найден\n";
+        if ($logString !== null) $logString .= $logMessage;
+        return 0;
+    }
+
+    // Определяем уровни поиска
+    $searchLevels = [];
+    
+    // Полное совпадение ФИО
+    if (count($fioParts) >= 3) {
+        $searchLevels[] = [
+            'name' => 'Полное совпадение ФИО',
+            'filter' => [
+                'LAST_NAME' => $fioParts[0],
+                'NAME' => $fioParts[1],
+                'SECOND_NAME' => $fioParts[2],
+            ]
+        ];
+    }
+    
+    // Частичное совпадение ФИО (по началу)
+    if (count($fioParts) >= 3) {
+        $searchLevels[] = [
+            'name' => 'Частичное совпадение ФИО (по началу)',
+            'filter' => [
+                'LAST_NAME' => $fioParts[0].'%',
+                'NAME' => $fioParts[1].'%',
+                'SECOND_NAME' => $fioParts[2].'%',
+            ]
+        ];
+    }
+    
+    // Полное совпадение ФИ (без отчества)
+    if (count($fioParts) >= 2) {
+        $searchLevels[] = [
+            'name' => 'Полное совпадение ФИ',
+            'filter' => [
+                'LAST_NAME' => $fioParts[0],
+                'NAME' => $fioParts[1],
+            ]
+        ];
+    }
+    
+    // Частичное совпадение ФИ (по началу)
+    if (count($fioParts) >= 2) {
+        $searchLevels[] = [
+            'name' => 'Частичное совпадение ФИ (по началу)',
+            'filter' => [
+                'LAST_NAME' => $fioParts[0].'%',
+                'NAME' => $fioParts[1].'%',
+            ]
+        ];
+    }
+    
+    // Поиск по фамилии и первой букве имени
+    if (count($fioParts) >= 2 && (mb_strlen($fioParts[1]) == 1 || (mb_strlen($fioParts[1]) == 2 && substr($fioParts[1], -1) == '.'))) {
+        $searchLevels[] = [
+            'name' => 'По фамилии и первой букве имени',
+            'filter' => [
+                'LAST_NAME' => $fioParts[0],
+                'NAME' => mb_substr($fioParts[1], 0, 1).'%',
+            ]
+        ];
+    }
+    
+    // Полное совпадение фамилии
+    if (count($fioParts) >= 1) {
+        $searchLevels[] = [
+            'name' => 'Полное совпадение фамилии',
+            'filter' => [
+                'LAST_NAME' => $fioParts[0],
+            ]
+        ];
+    }
+    
+    // Частичное совпадение фамилии
+    if (count($fioParts) >= 1) {
+        $searchLevels[] = [
+            'name' => 'Частичное совпадение фамилии',
+            'filter' => [
+                'LAST_NAME' => $fioParts[0].'%',
+            ]
+        ];
+    }
+    
+    // Если фамилия содержит пробел (например, "Иванов Петр")
+    if (count($fioParts) == 1 && strpos($fioParts[0], ' ') !== false) {
+        $parts = explode(' ', $fioParts[0]);
+        if (count($parts) >= 2) {
+            $searchLevels[] = [
+                'name' => 'По фамилии и первой букве имени из одной строки',
+                'filter' => [
+                    'LAST_NAME' => $parts[0],
+                    'NAME' => mb_substr($parts[1], 0, 1).'%',
+                ]
+            ];
+        }
+    }
+
+    // Выполняем поиск по уровням
+    foreach ($searchLevels as $level) {
+        $logMessage .= "Уровень поиска: {$level['name']}\n";
+        $logMessage .= "Фильтр: " . print_r($level['filter'], true) . "\n";
         
         $user = UserTable::getList([
-            'filter' => $filter,
+            'filter' => $level['filter'],
             'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME'],
             'limit' => 1
         ])->fetch();
-
+        
         if ($user) {
             $logMessage .= "Найден пользователь ID: {$user['ID']} (Фамилия: {$user['LAST_NAME']} Имя: {$user['NAME']} Отчество: {$user['SECOND_NAME']})\n";
             if ($logString !== null) $logString .= $logMessage;
             return $user['ID'];
         }
-        
-        $logMessage .= "Пользователь не найден\n";
-        if ($logString !== null) $logString .= $logMessage;
-        return 0;
-    }
-
-    // Остальная логика поиска (как было)
-    $filter = ['LOGIC' => 'OR', '=ACTIVE' => 'Y'];
-    
-    if (count($fioParts) >= 3) {
-        $filter[] = [
-            '=LAST_NAME' => $fioParts[0],
-            '=NAME' => $fioParts[1],
-            '=SECOND_NAME' => $fioParts[2],
-        ];
-        $filter[] = [
-            '%LAST_NAME' => $fioParts[0] . '%',
-            '%NAME' => $fioParts[1] . '%',
-            '%SECOND_NAME' => $fioParts[2] . '%',
-        ];
-    }
-    
-    if (count($fioParts) >= 2) {
-        $filter[] = [
-            '=LAST_NAME' => $fioParts[0],
-            '=NAME' => $fioParts[1],
-        ];
-        $filter[] = [
-            '%LAST_NAME' => $fioParts[0] . '%',
-            '%NAME' => $fioParts[1] . '%',
-        ];
-        
-        if (mb_strlen($fioParts[1]) == 1 || (mb_strlen($fioParts[1]) == 2 && substr($fioParts[1], -1) == '.')) {
-            $filter[] = [
-                '=LAST_NAME' => $fioParts[0],
-                '%=NAME' => mb_substr($fioParts[1], 0, 1) . '%'
-            ];
-        }
-    }
-    
-    if (count($fioParts) >= 1) {
-        $filter[] = ['=LAST_NAME' => $fioParts[0]];
-        $filter[] = ['%LAST_NAME' => $fioParts[0] . '%'];
-        
-        if (strpos($fioParts[0], ' ') !== false) {
-            $parts = explode(' ', $fioParts[0]);
-            if (count($parts) >= 2) {
-                $filter[] = [
-                    '=LAST_NAME' => $parts[0],
-                    '%=NAME' => mb_substr($parts[1], 0, 1) . '%'
-                ];
-            }
-        }
-    }
-
-    $logMessage .= "Фильтр поиска: " . print_r($filter, true) . "\n";
-    
-    $user = UserTable::getList([
-        'filter' => $filter,
-        'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME'],
-        'limit' => 1
-    ])->fetch();
-
-    if ($user) {
-        $logMessage .= "Найден пользователь ID: {$user['ID']} (Фамилия: {$user['LAST_NAME']} Имя: {$user['NAME']} Отчество: {$user['SECOND_NAME']})\n";
-        if ($logString !== null) $logString .= $logMessage;
-        return $user['ID'];
     }
     
     $logMessage .= "Пользователь не найден\n";
