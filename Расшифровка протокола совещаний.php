@@ -44,6 +44,26 @@ if (empty($paragraphs)) {
 
 $logString .= "Обрабатываемых абзацев: " . count($paragraphs) . "\n";
 
+// Функция проверки валидности ФИО
+function isValidFio($fio) {
+    // Если инициалы с пробелами (3 буквы), считаем валидным
+    if (preg_match('/^([А-ЯЁ]\s){2}[А-ЯЁ]$/u', $fio)) {
+        return true;
+    }
+
+    $parts = preg_split('/\s+/', $fio);
+    if (count($parts) < 2) return false;
+    
+    foreach ($parts as $part) {
+        if (mb_strlen($part) < 1) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Функция поиска ФИО в тексте
 function findFioInText($text) {
     $fioPatterns = [
         // Полное ФИО (Фамилия Имя Отчество)
@@ -53,11 +73,10 @@ function findFioInText($text) {
         '/\b[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\b/u',
         
         // Фамилия и инициалы с точками (Аверкин М.Е. или Аверкин М. Е.)
-        '/\b[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\s*\.[А-ЯЁ]\s*\./u',
-        '/\b[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\s*\./u',
+        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\.?\s*([А-ЯЁ])?\.?/u',
         
         // Фамилия и инициалы без точек (Аверкин МЕ)
-        '/\b[А-ЯЁ][а-яё]+\s+[А-ЯЁ]{1,3}\b/u',
+        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ]{1,3})\b/u',
         
         // Только инициалы с точками и тире (только 3 буквы)
         '/\b[А-ЯЁ]{3}\.?\s*[–\-]/u',
@@ -67,46 +86,59 @@ function findFioInText($text) {
     ];
 
     $matches = [];
+    $processedNames = []; // Для отслеживания уже обработанных фамилий
+    
     foreach ($fioPatterns as $pattern) {
         if (preg_match_all($pattern, $text, $found, PREG_SET_ORDER)) {
             foreach ($found as $match) {
-                $fio = $match[0];
+                // Для паттерна с инициалами с точками
+                if (count($match) >= 4 && !empty($match[3])) {
+                    $fio = $match[1].' '.$match[2].' '.$match[3];
+                    $lastName = $match[1];
+                    if (!isset($processedNames[$lastName])) {
+                        $matches[] = $fio;
+                        $processedNames[$lastName] = true;
+                    }
+                    continue;
+                }
                 
-                // Убираем тире, скобки и точки в конце, если есть
+                // Для паттерна с инициалами без точек
+                if (count($match) >= 3 && !empty($match[2]) && mb_strlen($match[2]) > 1) {
+                    $initials = preg_split('//u', $match[2], -1, PREG_SPLIT_NO_EMPTY);
+                    $fio = $match[1].' '.implode(' ', $initials);
+                    $lastName = $match[1];
+                    if (!isset($processedNames[$lastName])) {
+                        $matches[] = $fio;
+                        $processedNames[$lastName] = true;
+                    }
+                    continue;
+                }
+                
+                $fio = $match[0];
                 $fio = preg_replace('/[–\-\(\)]/u', ' ', $fio);
-                $fio = preg_replace('/\s*\.\s*/u', '', $fio);
+                $fio = preg_replace('/\s*\.\s*/u', ' ', $fio);
                 $fio = preg_replace('/\s+/u', ' ', $fio);
                 $fio = trim($fio);
 
-                // Если инициалы без фамилии (ровно 3 заглавные буквы подряд)
+                // Обработка инициалов без фамилии
                 if (preg_match('/^[А-ЯЁ]{3}$/u', $fio)) {
                     $fio = implode(' ', mb_str_split($fio));
                 }
 
                 if (isValidFio($fio)) {
-                    $matches[] = $fio;
+                    // Извлекаем фамилию для проверки дубликатов
+                    $parts = explode(' ', $fio);
+                    $lastName = $parts[0];
+                    
+                    if (!isset($processedNames[$lastName])) {
+                        $matches[] = $fio;
+                        $processedNames[$lastName] = true;
+                    }
                 }
             }
         }
     }
     return array_unique($matches);
-}
-
-function isValidFio($fio) {
-    // Если инициалы с пробелами (3 буквы), считаем валидным
-    if (preg_match('/^([А-ЯЁ]\s){2}[А-ЯЁ]$/u', $fio)) {
-        return true;
-    }
-
-    $parts = preg_split('/\s+/', $fio);
-    if (count($parts) < 2) return false;
-    if (!preg_match('/^[А-ЯЁ][а-яё]+$/u', $parts[0])) return false;
-    foreach (array_slice($parts, 1) as $part) {
-        if (!preg_match('/^([А-ЯЁ][а-яё]+|[А-ЯЁ]\.?)$/u', $part)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 function findBitrixUserByFio($fioParts, &$logString = null) {
