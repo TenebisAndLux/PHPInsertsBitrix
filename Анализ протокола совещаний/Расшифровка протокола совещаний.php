@@ -383,4 +383,29 @@ $logString .= "Сроки: " . implode(", ", $processedDeadlines) . "\n";
 $this->SetVariable('PARAGRAPHS', $processedParagraphs);
 $this->SetVariable('EXECUTORS', $processedExecutors);
 $this->SetVariable('DEAD_LINES', $processedDeadlines);
+
+// Получаем массив дат
+$deadLines = $processedDeadlines;
+
+// Преобразуем строки дат в объекты DateTime для корректного сравнения
+$dateObjects = [];
+foreach ($deadLines as $dateStr) {
+    try {
+        $dateObjects[] = new DateTime($dateStr);
+    } catch (Exception $e) {
+        // Обработка ошибки неверного формата даты
+        error_log("Некорректный формат даты: " . $dateStr);
+    }
+}
+
+// Если есть валидные даты, находим максимальную
+if (!empty($dateObjects)) {
+    $maxDate = max($dateObjects);
+    $maxDateStr = $maxDate->format('Y-m-d'); // или другой нужный формат
+    $this->SetVariable('maxDate', $maxDateStr);
+} else {
+    $this->SetVariable('maxDate', null); // или пустая строка, или значение по умолчанию
+}
+
+// Обновляем лог
 $this->SetVariable('LOG_STRING', $logString);
