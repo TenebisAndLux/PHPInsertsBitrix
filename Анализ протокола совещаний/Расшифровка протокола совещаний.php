@@ -188,6 +188,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
         $searchLevels[] = [
             'name' => 'Полное совпадение ФИО',
             'filter' => [
+                '=ACTIVE' => 'Y',
                 'LAST_NAME' => $fioParts[0],
                 'NAME' => $fioParts[1],
                 'SECOND_NAME' => $fioParts[2],
@@ -200,6 +201,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
         $searchLevels[] = [
             'name' => 'Частичное совпадение ФИО (по началу)',
             'filter' => [
+                '=ACTIVE' => 'Y',
                 'LAST_NAME' => $fioParts[0].'%',
                 'NAME' => $fioParts[1].'%',
                 'SECOND_NAME' => $fioParts[2].'%',
@@ -212,6 +214,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
         $searchLevels[] = [
             'name' => 'Полное совпадение ФИ',
             'filter' => [
+                '=ACTIVE' => 'Y',
                 'LAST_NAME' => $fioParts[0],
                 'NAME' => $fioParts[1],
             ]
@@ -223,6 +226,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
         $searchLevels[] = [
             'name' => 'Частичное совпадение ФИ (по началу)',
             'filter' => [
+                '=ACTIVE' => 'Y',
                 'LAST_NAME' => $fioParts[0].'%',
                 'NAME' => $fioParts[1].'%',
             ]
@@ -234,6 +238,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
         $searchLevels[] = [
             'name' => 'По фамилии и первой букве имени',
             'filter' => [
+                '=ACTIVE' => 'Y',
                 'LAST_NAME' => $fioParts[0],
                 'NAME' => mb_substr($fioParts[1], 0, 1).'%',
             ]
@@ -245,6 +250,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
         $searchLevels[] = [
             'name' => 'Полное совпадение фамилии',
             'filter' => [
+                '=ACTIVE' => 'Y',
                 'LAST_NAME' => $fioParts[0],
             ]
         ];
@@ -255,6 +261,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
         $searchLevels[] = [
             'name' => 'Частичное совпадение фамилии',
             'filter' => [
+                '=ACTIVE' => 'Y',
                 'LAST_NAME' => $fioParts[0].'%',
             ]
         ];
@@ -267,6 +274,7 @@ function findBitrixUserByFio($fioParts, &$logString = null) {
             $searchLevels[] = [
                 'name' => 'По фамилии и первой букве имени из одной строки',
                 'filter' => [
+                    '=ACTIVE' => 'Y',
                     'LAST_NAME' => $parts[0],
                     'NAME' => mb_substr($parts[1], 0, 1).'%',
                 ]
