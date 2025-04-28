@@ -19,56 +19,41 @@ $logString .= "Исходный текст:\n{$inputText}\n\n";
 
 // Улучшенная функция поиска ФИО
 function findFioInText($text) {
-    $fioPatterns = [
-        // Полное ФИО (Фамилия Имя Отчество)
-        '/\b[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\b/u',
-        
-        // Только фамилия (Гусаров)
-        '/\b[А-ЯЁ][а-яё]+(?=\s|$|\.|,|-)/u',
-        
-        // Фамилия и Имя
-        '/\b[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\b/u',
-        
-        // Фамилия и инициалы с точками (Аверкин М.Е. или Аверкин М. Е.)
-        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\.?\s*([А-ЯЁ])?\.?/u',
-        
-        // Фамилия и инициалы без точек (Аверкин МЕ)
-        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ]{1,3})\b/u',
-        
-        // Только инициалы с точками и тире (только 3 буквы)
-        '/\b[А-ЯЁ]{3}\.?\s*[–\-]/u',
-        
-        // Только инициалы без точек (только 3 буквы)
-        '/\b[А-ЯЁ]{3}\b/u',
-
-        // Только инициалы с точками (только 3 буквы)
-        '/\b[А-ЯЁ]\.\s*[А-ЯЁ]\.\s*[А-ЯЁ]\.?\b/u',
-
-        // Только инициалы без точек (только 3 буквы)
-        '/\b[А-ЯЁ]\s*[А-ЯЁ]\s*[А-ЯЁ]\b/u',
-    ];
-
-    $matches = [];
-    foreach ($fioPatterns as $pattern) {
-        if (preg_match_all($pattern, $text, $found, PREG_SET_ORDER)) {
-            foreach ($found as $match) {
-                $fio = $match[0];
-                // Нормализация ФИО
-                $fio = preg_replace('/[–\-\(\)]/u', ' ', $fio);
-                $fio = preg_replace('/\s*\.\s*/u', ' ', $fio);
-                $fio = preg_replace('/\s+/u', ' ', $fio);
-                $fio = trim($fio);
-                
-                // Обработка инициалов (3 буквы)
-                if (preg_match('/^[А-ЯЁ]{3}$/u', $fio)) {
-                    $fio = implode(' ', mb_str_split($fio));
-                }
-                
-                $matches[] = $fio;
+    // Сначала ищем полные ФИО (Фамилия Имя Отчество)
+    if (preg_match_all('/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\b/u', $text, $matches, PREG_SET_ORDER)) {
+        $result = [];
+        foreach ($matches as $match) {
+            $result[] = $match[0];
+        }
+        return $result;
+    }
+    
+    // Затем ищем Фамилия Инициалы (Гусаров В.А.)
+    if (preg_match_all('/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\.?\s*([А-ЯЁ])?\.?/u', $text, $matches, PREG_SET_ORDER)) {
+        $result = [];
+        foreach ($matches as $match) {
+            $fio = $match[1].' '.$match[2];
+            if (isset($match[3])) {
+                $fio .= ' '.$match[3];
+            }
+            $result[] = $fio;
+        }
+        return $result;
+    }
+    
+    // Ищем только фамилию (Гусаров)
+    if (preg_match_all('/\b([А-ЯЁ][а-яё]+)(?=\s|$|\.|,|-)/u', $text, $matches, PREG_SET_ORDER)) {
+        $result = [];
+        foreach ($matches as $match) {
+            // Проверяем, что это действительно фамилия, а не часть другого слова
+            if (mb_strlen($match[1]) > 3) { // Фамилии обычно длиннее 3 букв
+                $result[] = $match[1];
             }
         }
+        return $result;
     }
-    return array_unique($matches);
+    
+    return [];
 }
 
 // Функция проверки валидности ФИО
