@@ -17,43 +17,85 @@ $logString = "Начало обработки документа\n";
 $logString .= "Тип документа: {$entityTypeName}, ID: {$entityId}\n";
 $logString .= "Исходный текст:\n{$inputText}\n\n";
 
-// Улучшенная функция поиска ФИО
 function findFioInText($text) {
-    // Сначала ищем полные ФИО (Фамилия Имя Отчество)
-    if (preg_match_all('/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\b/u', $text, $matches, PREG_SET_ORDER)) {
-        $result = [];
-        foreach ($matches as $match) {
-            $result[] = $match[0];
-        }
-        return $result;
-    }
+    $fioPatterns = [
+        // Полное ФИО (Фамилия Имя Отчество)
+        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\b/u',
+        
+        // Фамилия и Имя
+        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\b/u',
+        
+        // Фамилия и инициалы с точками (Аверкин М.Е. или Аверкин М. Е.)
+        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\.?\s*([А-ЯЁ])?\.?/u',
+        
+        // Фамилия и инициалы без точек (Аверкин МЕ)
+        '/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ]{1,3})\b/u',
+        
+        // Только фамилия (Гусаров) - длиннее 3 букв
+        '/\b([А-ЯЁ][а-яё]{3,})(?=\s|$|\.|,|-)/u',
+        
+        // Только инициалы с точками (А.Б.В или А. Б. В.)
+        '/\b([А-ЯЁ])\.\s*([А-ЯЁ])\.\s*([А-ЯЁ])\.?\b/u',
+        
+        // Только инициалы без точек (АБВ)
+        '/\b([А-ЯЁ]{3})\b/u',
+        
+        // Только инициалы с пробелами (А Б В)
+        '/\b([А-ЯЁ])\s+([А-ЯЁ])\s+([А-ЯЁ])\b/u',
+        
+        // Только инициалы с точками и тире (А.Б.В -)
+        '/\b([А-ЯЁ])\.([А-ЯЁ])\.([А-ЯЁ])\.?\s*[–\-]/u'
+    ];
+
+    $result = [];
     
-    // Затем ищем Фамилия Инициалы (Гусаров В.А.)
-    if (preg_match_all('/\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\.?\s*([А-ЯЁ])?\.?/u', $text, $matches, PREG_SET_ORDER)) {
-        $result = [];
-        foreach ($matches as $match) {
-            $fio = $match[1].' '.$match[2];
-            if (isset($match[3])) {
-                $fio .= ' '.$match[3];
+    foreach ($fioPatterns as $pattern) {
+        if (preg_match_all($pattern, $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $fio = '';
+                
+                // Обработка разных форматов
+                if (count($match) > 4) {
+                    // Полное ФИО или ФИ
+                    $fio = trim("{$match[1]} {$match[2]} " . (isset($match[3]) ? $match[3] : ''));
+                } elseif (isset($match[3])) {
+                    // Инициалы (А.Б.В или А Б В)
+                    $fio = "{$match[1]} {$match[2]} {$match[3]}";
+                } elseif (isset($match[2])) {
+                    // Фамилия + инициалы
+                    if (mb_strlen($match[2]) > 1) {
+                        // Для формата "Фамилия АБ" -> "Фамилия А Б"
+                        $initials = implode(' ', mb_str_split($match[2]));
+                        $fio = "{$match[1]} {$initials}";
+                    } else {
+                        $fio = "{$match[1]} {$match[2]}";
+                    }
+                } else {
+                    // Только фамилия или инициалы (3 буквы)
+                    if (mb_strlen($match[1]) === 3 && preg_match('/^[А-ЯЁ]{3}$/u', $match[1])) {
+                        $fio = implode(' ', mb_str_split($match[1]));
+                    } else {
+                        $fio = $match[1];
+                    }
+                }
+                
+                // Нормализация
+                $fio = preg_replace('/[–\-\(\)]/u', ' ', $fio);
+                $fio = preg_replace('/\s*\.\s*/u', ' ', $fio);
+                $fio = preg_replace('/\s+/u', ' ', $fio);
+                $fio = trim($fio);
+                
+                // Проверка минимальной длины (если не инициалы)
+                if (!preg_match('/^([А-ЯЁ]\s?){2,3}$/u', $fio) && mb_strlen(str_replace(' ', '', $fio)) < 3) {
+                    continue;
+                }
+                
+                $result[] = $fio;
             }
-            $result[] = $fio;
         }
-        return $result;
     }
     
-    // Ищем только фамилию (Гусаров)
-    if (preg_match_all('/\b([А-ЯЁ][а-яё]+)(?=\s|$|\.|,|-)/u', $text, $matches, PREG_SET_ORDER)) {
-        $result = [];
-        foreach ($matches as $match) {
-            // Проверяем, что это действительно фамилия, а не часть другого слова
-            if (mb_strlen($match[1]) > 3) { // Фамилии обычно длиннее 3 букв
-                $result[] = $match[1];
-            }
-        }
-        return $result;
-    }
-    
-    return [];
+    return array_unique($result);
 }
 
 // Функция проверки валидности ФИО
@@ -75,12 +117,17 @@ function isValidFio($fio) {
     return true;
 }
 
-// Функция проверки валидности даты
 function isValidDate($dateStr) {
     // Проверка формата DD.MM.YYYY
     if (preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $dateStr)) {
         $parts = explode('.', $dateStr);
         return checkdate($parts[1], $parts[0], $parts[2]);
+    }
+    
+    // Проверка формата DD.MM.YY
+    if (preg_match('/^\d{2}\.\d{2}\.\d{2}$/', $dateStr)) {
+        $parts = explode('.', $dateStr);
+        return checkdate($parts[1], $parts[0], '20'.$parts[2]);
     }
     
     // Проверка формата DD.MM
@@ -105,8 +152,8 @@ function isValidDate($dateStr) {
 // Функция поиска сроков (включая недели)
 function findDeadlines($text) {
     $patterns = [
-        // Полная дата (23.04.2025)
-        '/(\d{2}\.\d{2}\.\d{4})/',
+        // Полная дата (23.04.2025 или 23.04.25)
+        '/(\d{2}\.\d{2}\.(\d{4}|\d{2}))/',
         
         // Дата без года (23.04)
         '/(\d{2}\.\d{2})(?!\.\d{1,4})/',
@@ -119,14 +166,12 @@ function findDeadlines($text) {
         
         // Срок в днях (5 дней)
         '/(\d+)\s+дн[еяёй]/ui',
-
-        '/\d{2}\.\d{2}\.\d{4}/',
-
-        '/\d{1,2}\s+[а-яё]+/ui',
-
-        '/(\d+)\s+дн[еяёй]/ui',
-
-        '/\d{2}\.\d{2}/'
+        
+        // Формат "до 01.05.25"
+        '/до\s+(\d{2}\.\d{2}\.\d{2})/ui',
+        
+        // Формат "срок до 01.05"
+        '/срок\s+до\s+(\d{2}\.\d{2})/ui'
     ];
     
     $deadlines = [];
@@ -146,6 +191,10 @@ function findDeadlines($text) {
                     $days = (int)$dateStr;
                     $date = (new DateTime())->add("{$days} days");
                     $dateStr = $date->format('d.m.Y');
+                }
+                // Для дат с двухзначным годом (01.05.25)
+                elseif (preg_match('/^\d{2}\.\d{2}\.\d{2}$/', $dateStr)) {
+                    $dateStr = substr($dateStr, 0, 6) . '20' . substr($dateStr, 6);
                 }
                 
                 if (isValidDate($dateStr)) {
