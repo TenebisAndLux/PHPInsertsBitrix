@@ -346,55 +346,43 @@ function findBitrixUser($fioInput, &$logString = null) {
 }
 
 
-// Функция обработки абзаца
+// Функция обработки абзаца (без удаления исполнителей и сроков)
 function processParagraph($paragraph, &$logString) {
     $original = $paragraph;
     $logString .= "Обработка абзаца: {$paragraph}\n";
     
-    // 1. Находим ФИО
+    // 1. Находим ФИО (без удаления из текста)
     $fios = findFioInText($paragraph);
     $logString .= "Найдены ФИО: ".($fios ? implode(", ", $fios) : "нет")."\n";
     
-    // 2. Находим сроки
+    // 2. Находим сроки (без удаления из текста)
     $deadlines = findDeadlines($paragraph);
     $logString .= "Найдены сроки: ".($deadlines ? implode(", ", $deadlines) : "нет")."\n";
     
     $executors = [];
     $finalDeadline = null;
     
-    // 3. Обработка ФИО
+    // 3. Обработка ФИО (только поиск, без удаления)
     foreach ($fios as $fio) {
         $fullName = findBitrixUser($fio, $logString);
         if ($fullName) {
             $executors[] = $fullName;
-            // Удаляем все варианты ФИО
-            $paragraph = preg_replace('/\b'.preg_quote($fio, '/').'\b/u', '', $paragraph);
-            // Удаляем сокращения (ГВА)
-            if (preg_match('/^[А-ЯЁ]{3}$/u', str_replace(' ', '', $fio))) {
-                $short = str_replace(' ', '', $fio);
-                $paragraph = preg_replace('/\b'.$short.'\b/u', '', $paragraph);
-            }
         }
     }
     
-    // 4. Удаляем сроки
-    foreach ($deadlines as $dl) {
-        $paragraph = preg_replace('/\b'.preg_quote($dl, '/').'\b/u', '', $paragraph);
-    }
-    
-    // Берем последний срок
+    // 4. Определяем крайний срок (без удаления дат из текста)
     if (!empty($deadlines)) {
         $finalDeadline = end($deadlines);
     }
     
-    // 5. Очистка текста
+    // 5. Очистка текста (только форматирование)
     $paragraph = preg_replace('/\s+/', ' ', $paragraph);
     $paragraph = preg_replace('/\s*([.,;:])\s*/', '$1 ', $paragraph);
     $paragraph = preg_replace('/\s*г\.?/u', '', $paragraph);
     $paragraph = preg_replace('/\s*-\s*/u', ' ', $paragraph);
     $paragraph = trim($paragraph);
     
-    // 6. Добавляем исполнителей и срок
+    // 6. Добавляем исполнителей и срок в конец (если найдены)
     if (!empty($executors)) {
         $paragraph .= "\nИсполнители: ".implode(", ", $executors).".";
     }
